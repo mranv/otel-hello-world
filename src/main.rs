@@ -1,5 +1,8 @@
 
-use opentelemetry::{global, trace::TraceError, KeyValue};
+use opentelemetry::{
+    global,
+    trace::{TraceError, TracerProvider as _},
+};
 use opentelemetry_sdk::{
     propagation::TraceContextPropagator,
     resource::{ResourceDetector, EnvResourceDetector, OsResourceDetector, ProcessResourceDetector, 
@@ -41,8 +44,13 @@ fn init_tracer() -> Result<sdktrace::Tracer, TraceError> {
         .with_config(trace_config)
         .build();
 
-    // Initialize the tracer
-    Ok(provider.tracer("hello-world-demo"))
+    // Initialize the tracer and return it
+    Ok(provider.versioned_tracer(
+        "hello-world-demo",
+        Some(env!("CARGO_PKG_VERSION")),
+        Some("https://opentelemetry.io/schemas/1.4.0"),
+        None,
+    ))
 }
 
 #[tokio::main]
