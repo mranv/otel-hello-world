@@ -1,14 +1,12 @@
 use opentelemetry::{global, trace::TraceError};
 use opentelemetry_sdk::{
     propagation::TraceContextPropagator,
-    resource::{EnvResourceDetector, OsResourceDetector, ProcessResourceDetector, 
+    resource::{ResourceDetector, EnvResourceDetector, OsResourceDetector, ProcessResourceDetector, 
               SdkProvidedResourceDetector, TelemetryResourceDetector},
-    runtime::Tokio,
     trace as sdktrace,
 };
 use std::{env, time::Duration};
 use tracing::{info, info_span, Instrument};
-use opentelemetry_otlp::WithExportConfig;
 
 fn init_tracer() -> Result<sdktrace::Tracer, TraceError> {
     // Set global propagator for distributed tracing context
@@ -25,11 +23,16 @@ fn init_tracer() -> Result<sdktrace::Tracer, TraceError> {
     let endpoint = env::var("OTEL_EXPORTER_OTLP_ENDPOINT")
         .unwrap_or_else(|_| "http://localhost:4317".to_string());
 
-    opentelemetry_otlp::new_exporter()
-        .tonic()
-        .with_endpoint(endpoint)
-        .with_timeout(Duration::from_secs(3))
-        .into_tracer_with_trace_config(
+    // Build the tracer provider
+    opentelemetry_otlp::new_pipeline()
+        .tracing()
+        .with_exporter(
+            opentelemetry_otlp::new_exporter()
+                .tonic()
+                .with_endpoint(endpoint)
+                .with_timeout(Duration::from_secs(3))
+        )
+        .with_trace_config(
             sdktrace::config()
                 .with_resource(
                     os_resource
@@ -40,6 +43,7 @@ fn init_tracer() -> Result<sdktrace::Tracer, TraceError> {
                 )
                 .with_sampler(sdktrace::Sampler::AlwaysOn),
         )
+        .install_batch(opentelemetry_sdk::runtime::Tokio)
 }
 
 #[tokio::main]
