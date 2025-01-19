@@ -5,6 +5,7 @@ use opentelemetry_sdk::{
               SdkProvidedResourceDetector, TelemetryResourceDetector},
     trace as sdktrace,
 };
+use opentelemetry_otlp::TonicExporterBuilder;
 use std::{env, time::Duration};
 use tracing::{info, info_span, Instrument};
 
@@ -23,26 +24,22 @@ fn init_tracer() -> Result<sdktrace::Tracer, TraceError> {
     let endpoint = env::var("OTEL_EXPORTER_OTLP_ENDPOINT")
         .unwrap_or_else(|_| "http://localhost:4317".to_string());
 
-    // Build the tracer provider
+    // Build the tracer provider with TonicExporterBuilder
+    let trace_config = sdktrace::config()
+        .with_resource(
+            os_resource
+                .merge(&process_resource)
+                .merge(&sdk_resource)
+                .merge(&env_resource)
+                .merge(&telemetry_resource),
+        )
+        .with_sampler(sdktrace::Sampler::AlwaysOn);
+
     opentelemetry_otlp::new_pipeline()
         .tracing()
-        .with_exporter(
-            opentelemetry_otlp::new_exporter()
-                .tonic()
-                .with_endpoint(endpoint)
-                .with_timeout(Duration::from_secs(3))
-        )
-        .with_trace_config(
-            sdktrace::config()
-                .with_resource(
-                    os_resource
-                        .merge(&process_resource)
-                        .merge(&sdk_resource)
-                        .merge(&env_resource)
-                        .merge(&telemetry_resource),
-                )
-                .with_sampler(sdktrace::Sampler::AlwaysOn),
-        )
+        .with_trace_config(trace_config)
+        .with_tonic()
+        .with_endpoint(endpoint)
         .install_batch(opentelemetry_sdk::runtime::Tokio)
 }
 
@@ -66,16 +63,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Simulate some work
         let message = "Hello, OpenTelemetry!";
         
-        // Add an event to the span
+        // Add an event to the span with security context
         info!(
             message = message,
             timestamp = chrono::Utc::now().timestamp(),
-            security.level = "INFO"
+            security.level = "INFO",
+            security.event_type = "application_start"
         );
         
         tokio::time::sleep(Duration::from_secs(1)).await;
         
-        info!("Application completed successfully");
+        info!(
+            "Application completed successfully",
+            security.event_type = "application_end"
+        );
     }
     .instrument(root_span)
     .await;
