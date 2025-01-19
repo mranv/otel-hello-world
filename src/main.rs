@@ -1,11 +1,12 @@
-use opentelemetry::{global, trace::TraceError};
+
+use opentelemetry::{global, trace::TraceError, KeyValue};
 use opentelemetry_sdk::{
     propagation::TraceContextPropagator,
     resource::{ResourceDetector, EnvResourceDetector, OsResourceDetector, ProcessResourceDetector, 
               SdkProvidedResourceDetector, TelemetryResourceDetector},
     trace as sdktrace,
+    trace::TracerProvider,
 };
-use opentelemetry_otlp::TonicExporterBuilder;
 use std::{env, time::Duration};
 use tracing::{info, info_span, Instrument};
 
@@ -24,7 +25,7 @@ fn init_tracer() -> Result<sdktrace::Tracer, TraceError> {
     let endpoint = env::var("OTEL_EXPORTER_OTLP_ENDPOINT")
         .unwrap_or_else(|_| "http://localhost:4317".to_string());
 
-    // Build the tracer provider with TonicExporterBuilder
+    // Build the tracer provider
     let trace_config = sdktrace::config()
         .with_resource(
             os_resource
@@ -35,12 +36,13 @@ fn init_tracer() -> Result<sdktrace::Tracer, TraceError> {
         )
         .with_sampler(sdktrace::Sampler::AlwaysOn);
 
-    opentelemetry_otlp::new_pipeline()
-        .tracing()
-        .with_trace_config(trace_config)
-        .with_tonic()
-        .with_endpoint(endpoint)
-        .install_batch(opentelemetry_sdk::runtime::Tokio)
+    // Create a tracer provider
+    let provider = TracerProvider::builder()
+        .with_config(trace_config)
+        .build();
+
+    // Initialize the tracer
+    Ok(provider.tracer("hello-world-demo"))
 }
 
 #[tokio::main]
@@ -51,9 +53,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Create a span for the main operation
     let root_span = info_span!(
         "hello_world_operation",
-        service.name = "hello-world-demo",
-        service.version = env!("CARGO_PKG_VERSION"),
-        security.context = "demo_context"
+        "service.name" = "hello-world-demo",
+        "service.version" = env!("CARGO_PKG_VERSION"),
+        "security.context" = "demo_context"
     );
 
     // Perform the main operation within the span
@@ -65,17 +67,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         
         // Add an event to the span with security context
         info!(
-            message = message,
-            timestamp = chrono::Utc::now().timestamp(),
-            security.level = "INFO",
-            security.event_type = "application_start"
+            event.type = "application_start",
+            message = %message,
+            timestamp = %chrono::Utc::now().timestamp(),
         );
         
         tokio::time::sleep(Duration::from_secs(1)).await;
         
         info!(
-            "Application completed successfully",
-            security.event_type = "application_end"
+            event.type = "application_end",
+            message = "Application completed successfully"
         );
     }
     .instrument(root_span)
