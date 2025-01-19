@@ -7,7 +7,7 @@ edition = "2021"
 tokio = { version = "1.36", features = ["full"] }
 opentelemetry = { version = "0.21" }
 opentelemetry_sdk = { version = "0.21", features = ["trace", "rt-tokio"] }
-opentelemetry-otlp = { version = "0.21", features = ["tonic"] }
+opentelemetry-otlp = { version = "0.27", features = ["tonic"] }
 tonic = "0.10"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
